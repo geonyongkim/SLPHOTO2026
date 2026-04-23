@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>배광시험실 예약 시스템 (Firestore)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
+:root{
+  --bg:#f3f2f1; --border:#a8a6a4; --bl:#d0cecc;
+  --tp:#201f1e; --ts:#605e5c; --tm:#a19f9d;
+  --accent:#0078d4; --ah:#106ebe;
+  --row-h:30px; --col-w:120px;
+}
+*{margin:0;padding:0;box-sizing:border-box;user-select:none;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--tp);font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+/* TOP BAR */
+.topbar{background:#fff;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 16px;height:50px;flex-shrink:0;}
+.logo{font-size:15px;font-weight:700;color:var(--accent);white-space:nowrap;}
+.sync-status{font-size:10px;padding:4px 8px;border-radius:12px;display:flex;align-items:center;gap:4px;}
+.sync-status.connected{background:#d4edda;color:#155724;}
+.sync-status.disconnected{background:#f8d7da;color:#721c24;}
+.sync-status.syncing{background:#fff3cd;color:#856404;}
+.tdiv{width:1px;height:22px;background:var(--border);}
+.tsp{flex:1;}
+.nav-g{display:flex;align-items:center;border:1px solid var(--border);border-radius:5px;overflow:hidden;}
+.nav-b{background:#fff;border:none;cursor:pointer;padding:5px 12px;font-size:14px;color:var(--ts);}
+.nav-b:hover{background:var(--bg);}
+.nav-s{width:1px;background:var(--border);align-self:stretch;}
+.wlbl{font-size:13px;font-weight:700;color:var(--tp);padding:0 14px;min-width:120px;text-align:center;}
+.btn-today{background:none;border:1px solid var(--border);padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;color:var(--ts);}
+.btn-today:hover{border-color:var(--accent);color:var(--accent);background:#eff6fc;}
+.btn-new{background:var(--accent);color:#fff;border:none;padding:7px 16px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;}
+.btn-new:hover{background:var(--ah);}
+
+/* MAIN */
+.main{display:flex;flex:1;overflow:hidden;}
+
+/* SIDEBAR */
+.sidebar{width:165px;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;padding:12px 0;}
+.sb-sec{padding:0 12px 14px;}
+.sb-ttl{font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;}
+.mc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;}
+.mc-dow{font-size:9px;color:var(--tm);text-align:center;padding:2px 0;}
+.mc-day{font-size:10px;text-align:center;padding:3px 1px;border-radius:50%;cursor:pointer;color:var(--ts);}
+.mc-day:hover{background:#f0f0f0;}
+.mc-day.today{background:var(--accent);color:#fff;font-weight:700;}
+.mc-day.in-week{background:#deeffe;color:var(--accent);font-weight:600;}
+.mc-day.empty{pointer-events:none;}
+.f-list{display:flex;flex-direction:column;gap:3px;}
+.f-row{display:flex;align-items:center;gap:6px;padding:4px 5px;border-radius:4px;cursor:pointer;font-size:11px;}
+.f-row:hover{background:#f5f5f5;}
+.f-row input{accent-color:var(--accent);width:13px;height:13px;}
+.f-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+.st-item{margin-bottom:6px;}
+.st-head{display:flex;justify-content:space-between;margin-bottom:3px;}
+.st-lbl{font-size:10px;} .st-val{font-size:10px;font-weight:700;}
+.st-bar{height:4px;background:#eee;border-radius:2px;overflow:hidden;}
+.st-fill{height:100%;border-radius:2px;transition:width .3s;}
+
+/* DRAG HINT */
+.drag-hint{font-size:9px;color:var(--tm);padding:4px 8px;background:#f0f6ff;border-radius:4px;white-space:nowrap;}
+
+/* CAL */
+.cal-wrap{flex:1;overflow:auto;background:#f8f7f6;}
+.cal-wrap::-webkit-scrollbar{width:6px;height:6px;}
+.cal-wrap::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px;}
+.wrap{padding:12px;min-width:max-content;}
+
+/* TABLE */
+table.gt{border-collapse:collapse;background:#fff;border:2px solid var(--border);}
+table.gt th,table.gt td{border:1px solid var(--bl);text-align:center;vertical-align:middle;white-space:nowrap;}
+
+/* 헤더 */
+.th-corner{background:#e4e2e0;position:sticky;top:0;z-index:15;}
+.th-date{font-size:12px;font-weight:700;padding:6px 4px;height:32px;background:#d4d2d0;color:var(--tp);position:sticky;top:0;z-index:10;}
+.th-date.today-col{background:#b0ccee;color:#002060;}
+.th-shift-day{font-size:11px;font-weight:700;padding:3px 6px;height:22px;background:#fff4e0;color:#7a4f00;position:sticky;top:32px;z-index:9;width:var(--col-w);min-width:var(--col-w);}
+.th-shift-night{font-size:11px;font-weight:700;padding:3px 6px;height:22px;background:#edf0ff;color:#003580;position:sticky;top:32px;z-index:9;width:var(--col-w);min-width:var(--col-w);border-right:2px solid var(--border)!important;}
+
+/* 배광실 이름 */
+.td-room{font-size:12px;font-weight:700;padding:6px 10px;text-align:left;vertical-align:middle;white-space:nowrap;border-right:2px solid var(--border)!important;min-width:80px;}
+/* 오전/오후 */
+.td-ampm{font-size:11px;font-weight:700;text-align:center;vertical-align:middle;padding:0 5px;white-space:nowrap;width:28px;min-width:28px;border-right:1px solid var(--bl)!important;}
+.td-ampm.pm{border-top:2px solid var(--border)!important;}
+/* 시간 라벨 */
+.td-time{font-size:9px;text-align:right;vertical-align:middle;padding:2px 6px 2px 2px;background:#f8f7f6;border-right:2px solid var(--border)!important;line-height:1.5;height:var(--row-h);min-width:86px;}
+.td-time .td{color:#7a4f00;font-weight:600;}
+.td-time .tn{color:#003580;font-weight:600;}
+.td-time.pm{border-top:2px solid var(--border)!important;}
+
+/* 슬롯 셀 */
+.td-slot{width:var(--col-w);min-width:var(--col-w);height:var(--row-h);padding:0;cursor:crosshair;position:relative;transition:background .08s;}
+.td-slot:hover{filter:brightness(.93);}
+.td-slot.night-col{border-right:2px solid var(--border)!important;}
+.td-slot.pm{border-top:2px solid var(--border)!important;}
+/* 드래그 프리뷰 */
+.td-slot.drag-preview{background:rgba(0,120,212,.18)!important;outline:1px solid rgba(0,120,212,.45);z-index:2;}
+/* 셀 선택 확정 상태 */
+.td-slot.selected{background:rgba(0,120,212,.28)!important;outline:2px solid rgba(0,120,212,.7);outline-offset:-2px;z-index:3;}
+/* 키보드 커서 포커스 */
+.td-slot.cursor-focus{outline:2px solid var(--accent)!important;outline-offset:-2px;z-index:4;}
+.td-slot.selected.cursor-focus{outline:2px solid #004ea8!important;box-shadow:0 0 0 3px rgba(0,120,212,.2);}
+/* 붙여넣기 hover */
+.td-slot.paste-ready{background:rgba(16,124,16,.14)!important;outline:2px dashed #107c10!important;outline-offset:-2px;cursor:cell;}
+/* 복사된 이벤트 블록 */
+.ev-block.copied{outline:2px dashed #0078d4!important;outline-offset:-1px;}
+/* 예약 블록 선택 */
+.ev-block.ev-selected{outline:2px solid #004ea8!important;outline-offset:-1px;filter:brightness(.88);box-shadow:0 0 0 3px rgba(0,120,212,.25)!important;}
+/* 블록 드래그 이동 중 */
+.ev-block.block-dragging{opacity:.4;cursor:grabbing!important;}
+/* 리사이즈 핸들 (상·하 양쪽, bar 표시 없음) */
+.ev-resize-handle{position:absolute;left:0;right:0;height:7px;cursor:ns-resize;background:transparent;z-index:6;}
+.ev-resize-handle.top{top:0;}
+.ev-resize-handle.bottom{bottom:0;}
+/* 리사이즈 중 */
+.ev-block.block-resizing{opacity:.7;cursor:ns-resize!important;}
+.td-slot.resize-target{background:rgba(0,120,212,.22)!important;outline:2px dashed rgba(0,120,212,.7)!important;outline-offset:-2px;}
+.td-slot.resize-blocked{background:rgba(196,62,28,.15)!important;outline:2px dashed rgba(196,62,28,.6)!important;outline-offset:-2px;}
+.td-slot.resize-shrink{background:rgba(180,100,0,.08)!important;outline:2px dashed rgba(150,80,0,.4)!important;outline-offset:-2px;position:relative;}
+.td-slot.resize-shrink::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(135deg,transparent,transparent 4px,rgba(150,80,0,.12) 4px,rgba(150,80,0,.12) 6px);pointer-events:none;}
+.td-slot.drop-target{background:rgba(0,120,212,.22)!important;outline:2px dashed rgba(0,120,212,.7)!important;outline-offset:-2px;}
+.td-slot.drop-blocked{background:rgba(196,62,28,.15)!important;outline:2px dashed rgba(196,62,28,.6)!important;outline-offset:-2px;}
+/* 토스트 */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#323130;color:#fff;padding:9px 20px;border-radius:20px;font-size:12px;font-weight:500;z-index:500;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;}
+/* 이벤트 블록 */
+.ev-block{position:absolute;left:1px;right:1px;top:1px;border-radius:3px;border-left:3px solid;padding:3px 5px;font-size:9px;font-weight:600;overflow:hidden;cursor:grab;z-index:4;line-height:1.4;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,.12);}
+.ev-block:hover{filter:brightness(.88);}
+.ev-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ev-s{font-size:8px;font-weight:400;opacity:.85;}
+.ev-d{font-size:8px;font-weight:400;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* 배광실 구분 */
+.tr-room-sep td{border-top:3px solid var(--border)!important;height:0;padding:0;background:#dcdad8;}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;}
+.overlay.open{display:flex;}
+.modal{background:#fff;border-radius:6px;width:400px;box-shadow:0 8px 30px rgba(0,0,0,.2);overflow:hidden;}
+.modal-hd{background:var(--accent);color:#fff;padding:12px 15px;display:flex;align-items:center;justify-content:space-between;}
+.modal-hd h3{font-size:13px;font-weight:600;}
+.modal-hd button{background:none;border:none;color:#fff;font-size:19px;cursor:pointer;line-height:1;}
+.modal-bd{padding:15px;display:flex;flex-direction:column;gap:10px;}
+.frow{display:flex;flex-direction:column;gap:3px;}
+.frow label{font-size:10px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.4px;}
+.frow input,.frow select,.frow textarea{border:1px solid var(--border);border-radius:4px;padding:6px 9px;font-size:12px;font-family:inherit;color:var(--tp);outline:none;transition:border-color .12s;}
+.frow input:focus,.frow select:focus{border-color:var(--accent);}
+.frow textarea{resize:vertical;min-height:44px;}
+.frow2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.modal-ft{padding:10px 15px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+.btn-cancel{background:none;border:1px solid var(--border);padding:5px 13px;border-radius:4px;cursor:pointer;font-size:11px;}
+.btn-cancel:hover{background:#f5f5f5;}
+.btn-submit{background:var(--accent);color:#fff;border:none;padding:5px 16px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;}
+.btn-submit:hover{background:var(--ah);}
+.slot-info{background:#f0f6ff;border:1px solid #b8d4f0;border-radius:4px;padding:6px 10px;font-size:11px;color:#004080;}
+
+/* DETAIL POPUP */
+.detail{display:none;position:fixed;background:#fff;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.2);width:260px;z-index:200;overflow:hidden;border-top:3px solid var(--accent);}
+.detail.open{display:block;}
+.dh{padding:9px 11px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eee;}
+.dh-title{font-size:16px;font-weight:700;line-height:1.3;}
+.dh-sub{font-size:11px;color:var(--tm);margin-top:3px;}
+.dh-left{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;}
+.dh-actions{display:flex;gap:2px;flex-shrink:0;}
+.dh-btn{background:none;border:none;cursor:pointer;color:var(--tm);font-size:16px;padding:3px 5px;border-radius:4px;line-height:1;}
+.dh-btn:hover{background:#f0f0f0;color:var(--tp);}
+.db{padding:9px 11px;display:flex;flex-direction:column;gap:5px;border-top:1px solid #eee;}
+.dr{display:flex;gap:6px;font-size:11px;}
+.di{width:14px;text-align:center;color:var(--tm);flex-shrink:0;}
+.dr-text{line-height:1.5;flex:1;}
+.df{padding:7px 11px;border-top:1px solid #eee;display:flex;gap:6px;justify-content:flex-end;}
+.btn-edit{background:var(--accent);color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;}
+.btn-edit:hover{background:var(--ah);}
+.btn-del{background:none;border:1px solid #c43e1c;color:#c43e1c;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;}
+.btn-del:hover{background:#fdf0ee;}
+
+/* Loading Overlay */
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;}
+.loading-overlay.show{display:flex;}
+.spinner{width:50px;height:50px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+</div>
+
+<div class="topbar">
+  <div class="logo">🔬 배광시험실 예약 시스템</div>
+  <div class="sync-status disconnected" id="syncStatus">
+    <span id="syncIcon">●</span>
+    <span id="syncText">연결 중...</span>
+  </div>
+  <div class="tdiv"></div>
+  <button class="btn-today" onclick="goToday()">오늘</button>
+  <div class="nav-g">
+    <button class="nav-b" onclick="changeWeek(-1)">◀</button>
+    <div class="nav-s"></div>
+    <span class="wlbl" id="weekLbl"></span>
+    <div class="nav-s"></div>
+    <button class="nav-b" onclick="changeWeek(1)">▶</button>
+  </div>
+  <div class="tsp"></div>
+  <span class="drag-hint">↕ 드래그 선택 후 예약 &nbsp;|&nbsp; 예약 클릭→복사 &nbsp;|&nbsp; 셀선택+Ctrl+V 붙여넣기 &nbsp;|&nbsp; Ctrl+Z 실행취소</span>
+  <button class="btn-new" onclick="openModal()">＋ 새 예약</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sb-sec">
+      <div class="sb-ttl" id="mcLbl"></div>
+      <div class="mc-grid" id="miniCal"></div>
+    </div>
+    <div class="sb-sec">
+      <div class="sb-ttl">배광실 표시</div>
+      <div class="f-list" id="filterList"></div>
+    </div>
+    <div class="sb-sec">
+      <div class="sb-ttl">이번 주 현황</div>
+      <div id="statsArea"></div>
+    </div>
+  </div>
+
+  <div class="cal-wrap">
+    <div class="wrap">
+      <table class="gt" id="mainTable">
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-hd"><h3 id="modalTitle">새 예약 등록</h3><button onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="slot-info" id="slotInfo" style="display:none"></div>
+      <div class="frow"><label>의뢰 부서 / 담당자</label><input id="f_dept" type="text" placeholder="예) 광학설계팀 / 홍길동"></div>
+      <div class="frow"><label>시험 내용</label><input id="f_title" type="text" placeholder="예) LED 배광 측정"></div>
+      <div class="frow2">
+        <div class="frow"><label>배광실</label><select id="f_room"></select></div>
+        <div class="frow"><label>날짜</label><input id="f_date" type="date"></div>
+      </div>
+      <div class="frow">
+        <label>근무 구분</label>
+        <select id="f_shift" onchange="updateTimeOpts()">
+          <option value="day">주간</option>
+          <option value="night">야간</option>
+        </select>
+      </div>
+      <div class="frow2">
+        <div class="frow"><label>시작 시간</label><select id="f_start"></select></div>
+        <div class="frow"><label>종료 시간</label><select id="f_end"></select></div>
+      </div>
+      <div class="frow"><label>비고</label><textarea id="f_note" placeholder="특이사항 (선택)"></textarea></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn-cancel" onclick="closeModal()">취소</button>
+      <button class="btn-submit" onclick="submitReservation()">예약 등록</button>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL -->
+<div class="detail" id="detailPopup">
+  <div class="dh">
+    <div class="dh-left">
+      <div class="dh-title" id="dp-title"></div>
+      <div class="dh-sub" id="dp-sub"></div>
+    </div>
+    <div class="dh-actions">
+      <button class="dh-btn" id="copyBtn" title="복사 (Ctrl+C)" onclick="copySelectedEvent()">📋</button>
+      <button class="dh-btn" title="수정 (더블클릭)" onclick="editEvent()">✏️</button>
+      <button class="dh-btn" title="닫기" onclick="closeDetail()">✕</button>
+    </div>
+  </div>
+  <div class="db" id="dp-body"></div>
+  <div class="df">
+    <button class="btn-edit" onclick="editEvent()">수정</button>
+    <button class="btn-del" onclick="deleteEvent()">삭제</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, where, updateDoc, addDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+// Firebase 설정
+const firebaseConfig = {
+  apiKey: "AIzaSyAQ8-4tZvWQ0Et7hcspN9mXGLuMn4Qt9ZY",
+  authDomain: "photometric-cal.firebaseapp.com",
+  projectId: "photometric-cal",
+  storageBucket: "photometric-cal.firebasestorage.app",
+  messagingSenderId: "577481034597",
+  appId: "1:577481034597:web:7239021a3dfb6b28852f8c",
+  measurementId: "G-9XW1CLNK74"
+};
+
+// Firebase 초기화
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// 전역 변수로 노출
+window.firestoreDB = {
+  db,
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  deleteDoc,
+  onSnapshot,
+  query,
+  where,
+  updateDoc,
+  addDoc
+};
+
+console.log('✅ Firestore 초기화 완료');
+
+// 연결 상태 표시 (Firestore는 자동 연결이므로 바로 connected로 설정)
+setTimeout(() => {
+  const statusEl = document.getElementById('syncStatus');
+  const iconEl = document.getElementById('syncIcon');
+  const textEl = document.getElementById('syncText');
+  statusEl.className = 'sync-status connected';
+  iconEl.textContent = '●';
+  textEl.textContent = '실시간 동기화';
+}, 500);
+</script>
+
+<script>
+const ROOMS=[
+  {id:1,name:'1배광실',color:'#1a6eb5',bg:'#cce0f5',rowBg:'#e8f3fc'},
+  {id:2,name:'2배광실',color:'#0e6b0e',bg:'#c8e6c8',rowBg:'#e8f5e8'},
+  {id:3,name:'3배광실',color:'#b03018',bg:'#f5cec8',rowBg:'#fdecea'},
+  {id:4,name:'4배광실',color:'#007a94',bg:'#b8e0ea',rowBg:'#dcf0f5'},
+  {id:5,name:'5배광실',color:'#5c3d9e',bg:'#d8ccf0',rowBg:'#ede8fa'},
+  {id:6,name:'6배광실',color:'#b86c00',bg:'#f5dfa0',rowBg:'#fdf3dc'},
+];
+const ROWS=[
+  {ri:0,ampm:'오전',dTime:'08:00~09:00',nTime:'20:00~21:00'},
+  {ri:1,ampm:'오전',dTime:'09:00~10:00',nTime:'21:00~22:00'},
+  {ri:2,ampm:'오전',dTime:'10:00~11:00',nTime:'22:00~23:00'},
+  {ri:3,ampm:'오전',dTime:'11:00~12:00',nTime:'23:00~24:00'},
+  {ri:4,ampm:'오후',dTime:'13:00~14:00',nTime:'01:00~02:00'},
+  {ri:5,ampm:'오후',dTime:'14:00~15:00',nTime:'02:00~03:00'},
+  {ri:6,ampm:'오후',dTime:'15:00~16:00',nTime:'03:00~04:00'},
+  {ri:7,ampm:'오후',dTime:'16:00~17:00',nTime:'04:00~05:00'},
+];
+const DAY_TIMES  =['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
+const NIGHT_TIMES=['20:00','21:00','22:00','23:00','24:00','01:00','02:00','03:00','04:00','05:00'];
+const DAYS_KO=['일','월','화','수','목','금','토'];
+const DAY_START_TO_RI  ={'08:00':0,'09:00':1,'10:00':2,'11:00':3,'13:00':4,'14:00':5,'15:00':6,'16:00':7};
+const NIGHT_START_TO_RI={'20:00':0,'21:00':1,'22:00':2,'23:00':3,'01:00':4,'02:00':5,'03:00':6,'04:00':7};
+const DAY_END_TO_RI  ={'09:00':0,'10:00':1,'11:00':2,'12:00':3,'14:00':4,'15:00':5,'16:00':6,'17:00':7};
+const NIGHT_END_TO_RI={'21:00':0,'22:00':1,'23:00':2,'24:00':3,'02:00':4,'03:00':5,'04:00':6,'05:00':7};
+
+let currentMonday=getMonday(new Date());
+let events=[];
+let visibleRooms=new Set([1,2,3,4,5,6]);
+let selectedId=null,editingId=null;
+let isFirestoreReady = false;
+let unsubscribeSnapshot = null;
+
+// ══════════════════════════════════════════════════════════════
+// 🔥 FIRESTORE 함수
+// ══════════════════════════════════════════════════════════════
+
+function showLoading(show = true) {
+  const overlay = document.getElementById('loadingOverlay');
+  if (show) {
+    overlay.classList.add('show');
+  } else {
+    overlay.classList.remove('show');
+  }
+}
+
+function updateSyncStatus(status) {
+  const statusEl = document.getElementById('syncStatus');
+  const iconEl = document.getElementById('syncIcon');
+  const textEl = document.getElementById('syncText');
+  
+  if (status === 'syncing') {
+    statusEl.className = 'sync-status syncing';
+    iconEl.textContent = '⟳';
+    textEl.textContent = '동기화 중...';
+  } else if (status === 'connected') {
+    statusEl.className = 'sync-status connected';
+    iconEl.textContent = '●';
+    textEl.textContent = '실시간 동기화';
+  }
+}
+
+// Firestore에서 모든 이벤트 로드
+async function loadEventsFromFirestore() {
+  try {
+    showLoading(true);
+    updateSyncStatus('syncing');
+    
+    const { db, collection, getDocs } = window.firestoreDB;
+    const eventsCol = collection(db, 'events');
+    const snapshot = await getDocs(eventsCol);
+    
+    events = [];
+    snapshot.forEach((doc) => {
+      events.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    console.log(`✅ Firestore에서 ${events.length}개 이벤트 로드됨`);
+    
+    if (events.length === 0) {
+      console.log('ℹ️ Firestore에 데이터 없음 - 샘플 데이터 생성');
+      await seedEventsToFirestore();
+    }
+    
+    buildTable();
+    renderStats();
+    updateSyncStatus('connected');
+    showLoading(false);
+    
+  } catch (error) {
+    console.error('❌ Firestore 로드 오류:', error);
+    showToast('⚠️ 데이터 로드 실패: ' + error.message);
+    showLoading(false);
+  }
+}
+
+// Firestore에 이벤트 추가
+async function addEventToFirestore(event) {
+  try {
+    updateSyncStatus('syncing');
+    const { db, doc, setDoc } = window.firestoreDB;
+    const eventRef = doc(db, 'events', event.id);
+    await setDoc(eventRef, event);
+    console.log('✅ Firestore에 이벤트 추가:', event.id);
+    updateSyncStatus('connected');
+  } catch (error) {
+    console.error('❌ Firestore 추가 오류:', error);
+    showToast('⚠️ 저장 실패: ' + error.message);
+  }
+}
+
+// Firestore에서 이벤트 업데이트
+async function updateEventInFirestore(event) {
+  try {
+    updateSyncStatus('syncing');
+    const { db, doc, updateDoc } = window.firestoreDB;
+    const eventRef = doc(db, 'events', event.id);
+    
+    // id 필드는 업데이트하지 않음
+    const { id, ...updateData } = event;
+    await updateDoc(eventRef, updateData);
+    
+    console.log('✅ Firestore에서 이벤트 업데이트:', event.id);
+    updateSyncStatus('connected');
+  } catch (error) {
+    console.error('❌ Firestore 업데이트 오류:', error);
+    showToast('⚠️ 업데이트 실패: ' + error.message);
+  }
+}
+
+// Firestore에서 이벤트 삭제
+async function deleteEventFromFirestore(eventId) {
+  try {
+    updateSyncStatus('syncing');
+    const { db, doc, deleteDoc } = window.firestoreDB;
+    const eventRef = doc(db, 'events', eventId);
+    await deleteDoc(eventRef);
+    console.log('✅ Firestore에서 이벤트 삭제:', eventId);
+    updateSyncStatus('connected');
+  } catch (error) {
+    console.error('❌ Firestore 삭제 오류:', error);
+    showToast('⚠️ 삭제 실패: ' + error.message);
+  }
+}
+
+// 실시간 리스너 설정
+function setupFirestoreListener() {
+  const { db, collection, onSnapshot } = window.firestoreDB;
+  const eventsCol = collection(db, 'events');
+  
+  unsubscribeSnapshot = onSnapshot(eventsCol, (snapshot) => {
+    if (!isFirestoreReady) {
+      isFirestoreReady = true;
+      return;
+    }
+    
+    events = [];
+    snapshot.forEach((doc) => {
+      events.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    buildTable();
+    renderStats();
+    console.log('🔄 실시간 업데이트: 다른 사용자가 데이터 수정');
+    
+  }, (error) => {
+    console.error('❌ Firestore 리스너 오류:', error);
+  });
+}
+
+// 샘플 데이터 생성 및 Firestore에 저장
+async function seedEventsToFirestore() {
+  const base = new Date(currentMonday);
+  const sampleEvents = [
+    {room:1,dayOff:0,shift:'day',st:'08:00',et:'12:00',title:'LED 배광 측정',dept:'광학설계팀/김민준'},
+    {room:1,dayOff:0,shift:'night',st:'20:00',et:'23:00',title:'야간 Rework',dept:'품질팀/박정호'},
+    {room:2,dayOff:1,shift:'day',st:'09:00',et:'12:00',title:'프로젝터 광량',dept:'CAE팀/이수연'},
+    {room:2,dayOff:1,shift:'night',st:'20:00',et:'24:00',title:'야간 색도',dept:'광학설계팀/정미래'},
+    {room:3,dayOff:1,shift:'day',st:'10:00',et:'12:00',title:'Rework 재측정',dept:'품질팀/박정호'},
+    {room:4,dayOff:2,shift:'day',st:'08:00',et:'10:00',title:'긴급 평가',dept:'광학설계팀/이지훈'},
+    {room:5,dayOff:2,shift:'day',st:'13:00',et:'16:00',title:'색도 측정',dept:'광학설계팀/정미래'},
+    {room:6,dayOff:2,shift:'night',st:'20:00',et:'22:00',title:'헤드램프 야간',dept:'개발2팀/강태양'},
+    {room:3,dayOff:3,shift:'day',st:'13:00',et:'17:00',title:'신규 차종',dept:'개발3팀/한주원'},
+    {room:1,dayOff:4,shift:'day',st:'08:00',et:'12:00',title:'법규 적합',dept:'인증팀/오도현'},
+    {room:4,dayOff:4,shift:'day',st:'13:00',et:'17:00',title:'G65 Selective',dept:'광학설계팀/임채은'},
+  ];
+  
+  for (const ev of sampleEvents) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + ev.dayOff);
+    const newEvent = {
+      id: generateId(),
+      room: ev.room,
+      shift: ev.shift,
+      startTime: ev.st,
+      endTime: ev.et,
+      title: ev.title,
+      dept: ev.dept,
+      date: fmtDate(d),
+      note: ''
+    };
+    await addEventToFirestore(newEvent);
+  }
+  
+  await loadEventsFromFirestore();
+}
+
+// ID 생성 함수
+function generateId() {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 🎨 UI 함수들 (기존 코드)
+// ══════════════════════════════════════════════════════════════
+
+const UNDO_LIMIT=30;
+let undoStack=[];
+function saveUndo(){undoStack.push(JSON.parse(JSON.stringify(events)));if(undoStack.length>UNDO_LIMIT)undoStack.shift();}
+function undo(){
+  if(undoStack.length===0){showToast('더 이상 취소할 작업이 없습니다.');return;}
+  events=undoStack.pop();deselectBlock();clearSelection();cursor=null;applyCursor();closeDetail();buildTable();renderStats();refreshCopyHighlight();showToast('↩️ 실행 취소됨');
+}
+
+let drag=null;
+
+function getMonday(d){const dt=new Date(d);const day=dt.getDay();dt.setDate(dt.getDate()+(day===0?-6:1-day));dt.setHours(0,0,0,0);return dt;}
+function fmtDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function getWeekDays(){return Array.from({length:5},(_,i)=>{const d=new Date(currentMonday);d.setDate(d.getDate()+i);return d;});}
+function getWeekNum(d){return Math.ceil((d.getDate()+new Date(d.getFullYear(),d.getMonth(),1).getDay())/7);}
+function curWeekLabel(){return `${currentMonday.getMonth()+1}월 ${getWeekNum(currentMonday)}주`;}
+function mix(h1,h2,t){const p=v=>parseInt(v,16),h=s=>s.replace('#','');const a=h(h1),b=h(h2);return `rgb(${Math.round(p(a.slice(0,2))*(1-t)+p(b.slice(0,2))*t)},${Math.round(p(a.slice(2,4))*(1-t)+p(b.slice(2,4))*t)},${Math.round(p(a.slice(4,6))*(1-t)+p(b.slice(4,6))*t)})`;}
+function evToRi(ev){const sMap=ev.shift==='day'?DAY_START_TO_RI:NIGHT_START_TO_RI;const eMap=ev.shift==='day'?DAY_END_TO_RI:NIGHT_END_TO_RI;return{startRi:sMap[ev.startTime]??0,endRi:eMap[ev.endTime]??0};}
+function riToTimes(shift,startRi,endRi){
+  if(shift==='day'){const starts=['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];const ends=['09:00','10:00','11:00','12:00','14:00','15:00','16:00','17:00'];return{startTime:starts[startRi],endTime:ends[endRi]};}
+  else{const starts=['20:00','21:00','22:00','23:00','01:00','02:00','03:00','04:00'];const ends=['21:00','22:00','23:00','24:00','02:00','03:00','04:00','05:00'];return{startTime:starts[startRi],endTime:ends[endRi]};}
+}
+
+function buildTable(){
+  const days=getWeekDays();const todayStr=fmtDate(new Date());
+  const thead=document.getElementById('thead');const tbody=document.getElementById('tbody');
+  thead.innerHTML='';tbody.innerHTML='';
+  const tr1=document.createElement('tr');let th;
+  th=document.createElement('th');th.className='th-corner';th.rowSpan=2;th.style.minWidth='80px';tr1.appendChild(th);
+  th=document.createElement('th');th.className='th-corner';th.rowSpan=2;th.style.width='28px';tr1.appendChild(th);
+  th=document.createElement('th');th.className='th-corner';th.rowSpan=2;th.style.minWidth='88px';tr1.appendChild(th);
+  days.forEach(d=>{const isT=fmtDate(d)===todayStr;th=document.createElement('th');th.colSpan=2;th.className='th-date'+(isT?' today-col':'');th.textContent=`${d.getDate()}(${DAYS_KO[d.getDay()]})`;tr1.appendChild(th);});
+  thead.appendChild(tr1);
+  const tr2=document.createElement('tr');
+  days.forEach(d=>{const isT=fmtDate(d)===todayStr;th=document.createElement('th');th.className='th-shift-day';th.textContent='주간';if(isT)th.style.background='#ffe8a0';tr2.appendChild(th);th=document.createElement('th');th.className='th-shift-night';th.textContent='야간';if(isT)th.style.background='#d4e4ff';tr2.appendChild(th);});
+  thead.appendChild(tr2);
+  const visRooms=ROOMS.filter(r=>visibleRooms.has(r.id));const totalCols=3+days.length*2;
+  visRooms.forEach((room,ri)=>{
+    if(ri>0){const sep=document.createElement('tr');sep.className='tr-room-sep';const std=document.createElement('td');std.colSpan=totalCols;sep.appendChild(std);tbody.appendChild(sep);}
+    const wDates=days.map(d=>fmtDate(d));const cnt=events.filter(e=>e.room===room.id&&wDates.includes(e.date)).length;
+    const evMap={};events.filter(e=>e.room===room.id&&wDates.includes(e.date)).forEach(e=>{const key=`${e.date}-${e.shift}`;if(!evMap[key])evMap[key]=[];evMap[key].push(e);});
+    ROWS.forEach((rowDef,rowIdx)=>{
+      const tr=document.createElement('tr');const isPM=rowIdx>=4;const isFirstPM=rowIdx===4;
+      if(rowIdx===0){const td=document.createElement('td');td.rowSpan=8;td.className='td-room';td.style.cssText=`background:${room.bg};color:${room.color};border-top:2px solid ${room.color};`;td.innerHTML=`<span style="margin-right:3px">☑</span><b>${room.name}</b><br><span style="font-size:9px;font-weight:400;opacity:.7">${cnt}건</span>`;tr.appendChild(td);}
+      if(rowIdx===0||rowIdx===4){const td=document.createElement('td');td.rowSpan=4;td.className='td-ampm'+(isFirstPM?' pm':'');td.style.cssText=`background:${mix(room.bg,'#f0efee',.45)};color:${room.color};`;td.textContent=isPM?'오후':'오전';tr.appendChild(td);}
+      const tdT=document.createElement('td');tdT.className='td-time'+(isFirstPM?' pm':'');tdT.innerHTML=`<span class="td">${rowDef.dTime}</span><br><span class="tn">(${rowDef.nTime})</span>`;tr.appendChild(tdT);
+      days.forEach(d=>{
+        const dateStr=fmtDate(d);const isToday=dateStr===todayStr;
+        ['day','night'].forEach(shift=>{
+          const isNight=shift==='night';const evList=evMap[`${dateStr}-${shift}`]||[];
+          const coveringEv=evList.find(ev=>{const{startRi:s,endRi:e}=evToRi(ev);return rowIdx>s&&rowIdx<=e;});
+          const startingEv=evList.find(ev=>evToRi(ev).startRi===rowIdx);
+          if(coveringEv)return;
+          const td=document.createElement('td');td.className='td-slot'+(isFirstPM?' pm':'')+(isNight?' night-col':'');
+          const bgDay=isToday?mix(room.rowBg,'#cce8ff',.28):room.rowBg;const bgNight=isToday?mix(room.rowBg,'#ccd8ff',.35):mix(room.rowBg,'#eaeeff',.5);
+          td.style.background=isNight?bgNight:bgDay;td.dataset.room=room.id;td.dataset.date=dateStr;td.dataset.shift=shift;td.dataset.ri=rowIdx;
+          if(startingEv){
+            const{startRi:eStart,endRi:eEnd}=evToRi(startingEv);const span=eEnd-eStart+1;if(span>1)td.rowSpan=span;td.style.verticalAlign='top';
+            const rowH=30;const crossesMidDay=(startingEv.shift==='day'&&eStart<=3&&eEnd>=4);const extraPx=crossesMidDay?1:0;
+            const block=document.createElement('div');block.className='ev-block';block.dataset.evid=startingEv.id;
+            block.style.cssText=`background:${room.bg};color:${room.color};border-left-color:${room.color};height:${span*rowH+(span-1)+extraPx-2}px;`;
+            block.innerHTML=`<div class="ev-t">${startingEv.title}</div><div class="ev-s">${startingEv.startTime}~${startingEv.endTime}</div><div class="ev-d">${startingEv.dept||''}</div>`;
+            const hTop=document.createElement('div');hTop.className='ev-resize-handle top';hTop.title='드래그로 시작 시간 조절';
+            hTop.addEventListener('mousedown',e=>{e.stopPropagation();onResizeStart(e,startingEv.id,'top');});
+            block.appendChild(hTop);
+            const hBot=document.createElement('div');hBot.className='ev-resize-handle bottom';hBot.title='드래그로 종료 시간 조절';
+            hBot.addEventListener('mousedown',e=>{e.stopPropagation();onResizeStart(e,startingEv.id,'bottom');});
+            block.appendChild(hBot);block.addEventListener('click',e=>handleBlockClick(startingEv.id,e));block.addEventListener('mousedown',e=>onBlockDragStart(e,startingEv.id));td.appendChild(block);
+          } else {td.addEventListener('mousedown',onMouseDown);td.addEventListener('mouseenter',onMouseEnter);td.addEventListener('mouseup',onMouseUp);}
+          tr.appendChild(td);
+        });
+      });
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+// ── BLOCK DRAG ──
+let blockDrag=null;
+function onBlockDragStart(e,evId){
+  if(e.button!==0)return;if(clickTimer)return;
+  const ev=events.find(x=>x.id===evId);if(!ev)return;
+  const{startRi,endRi}=evToRi(ev);const span=endRi-startRi+1;
+  const td=e.currentTarget.closest('td')||e.target.closest('td');const grabRi=td?parseInt(td.dataset.ri||startRi):startRi;
+  blockDrag={evId,room:ev.room,shift:ev.shift,origStartRi:startRi,origEndRi:endRi,span,grabRi,currentTargetRi:startRi,currentTargetDate:ev.date,currentTargetShift:ev.shift,moved:false};
+  e.preventDefault();e.stopPropagation();
+  document.querySelectorAll(`.ev-block[data-evid="${evId}"]`).forEach(el=>el.classList.add('block-dragging'));
+  document.addEventListener('mousemove',onBlockDragMove);document.addEventListener('mouseup',onBlockDragEnd);
+}
+function onBlockDragMove(e){
+  if(!blockDrag)return;
+  const el=document.elementFromPoint(e.clientX,e.clientY);const td=el?el.closest('.td-slot'):null;
+  document.querySelectorAll('.td-slot.drop-target,.td-slot.drop-blocked').forEach(c=>c.classList.remove('drop-target','drop-blocked'));
+  if(!td)return;const targetRoom=parseInt(td.dataset.room);const targetDate=td.dataset.date;const targetShift=td.dataset.shift;const targetRi=parseInt(td.dataset.ri);
+  if(targetRoom!==blockDrag.room)return;
+  const offset=blockDrag.grabRi-blockDrag.origStartRi;const newStart=targetRi-offset;const newEnd=newStart+blockDrag.span-1;
+  if(newStart<0||newEnd>7)return;
+  blockDrag.currentTargetRi=newStart;blockDrag.currentTargetDate=targetDate;blockDrag.currentTargetShift=targetShift;blockDrag.moved=true;
+  const conflict=events.find(e2=>{if(e2.id===blockDrag.evId)return false;if(e2.room!==blockDrag.room||e2.date!==targetDate||e2.shift!==targetShift)return false;const{startRi:s,endRi:en}=evToRi(e2);return newStart<=en&&newEnd>=s;});
+  const cls=conflict?'drop-blocked':'drop-target';
+  for(let r=newStart;r<=newEnd;r++){document.querySelectorAll(`.td-slot[data-room="${blockDrag.room}"][data-date="${targetDate}"][data-shift="${targetShift}"][data-ri="${r}"]`).forEach(c=>c.classList.add(cls));}
+}
+async function onBlockDragEnd(e){
+  document.removeEventListener('mousemove',onBlockDragMove);document.removeEventListener('mouseup',onBlockDragEnd);
+  document.querySelectorAll('.td-slot.drop-target,.td-slot.drop-blocked').forEach(c=>c.classList.remove('drop-target','drop-blocked'));
+  if(!blockDrag)return;
+  const{evId,room,shift,origStartRi,origEndRi,span,currentTargetRi,currentTargetDate,currentTargetShift,moved}=blockDrag;
+  document.querySelectorAll(`.ev-block[data-evid="${evId}"]`).forEach(el=>el.classList.remove('block-dragging'));
+  blockDrag=null;if(!moved)return;
+  const newStart=currentTargetRi;const newEnd=newStart+span-1;const newShift=currentTargetShift||shift;
+  const conflict=events.find(e2=>{if(e2.id===evId)return false;if(e2.room!==room||e2.date!==currentTargetDate||e2.shift!==newShift)return false;const{startRi:s,endRi:en}=evToRi(e2);return newStart<=en&&newEnd>=s;});
+  if(conflict){showToast(`⚠️ 이동 불가 — 겹치는 예약 (${conflict.title})`);buildTable();return;}
+  const ev=events.find(x=>x.id===evId);if(!ev)return;
+  if(currentTargetDate===ev.date&&newShift===ev.shift&&newStart===origStartRi){buildTable();return;}
+  saveUndo();const{startTime,endTime}=riToTimes(newShift,newStart,newEnd);
+  ev.date=currentTargetDate;ev.shift=newShift;ev.startTime=startTime;ev.endTime=endTime;
+  
+  // 🔥 Firestore 업데이트
+  await updateEventInFirestore(ev);
+  
+  buildTable();renderStats();showToast(`✅ 이동됨 → ${currentTargetDate} ${newShift==='day'?'주간':'야간'} ${startTime}~${endTime}`);
+}
+
+// ── BLOCK RESIZE ──
+let blockResize=null;
+function onResizeStart(e,evId,edge){
+  if(e.button!==0)return;e.preventDefault();e.stopPropagation();
+  const ev=events.find(x=>x.id===evId);if(!ev)return;
+  const{startRi,endRi}=evToRi(ev);
+  const startTd=document.querySelector(`.td-slot[data-room="${ev.room}"][data-date="${ev.date}"][data-shift="${ev.shift}"][data-ri="${startRi}"]`);
+  if(!startTd)return;
+  const rowHCss=getComputedStyle(document.documentElement).getPropertyValue('--row-h').trim();
+  const rowH=parseFloat(rowHCss)||30;
+  const blockTop=startTd.getBoundingClientRect().top;
+  blockResize={
+    evId,room:ev.room,date:ev.date,shift:ev.shift,
+    edge:edge||'bottom',
+    origStartRi:startRi,origEndRi:endRi,
+    currentStartRi:startRi,currentEndRi:endRi,
+    blockTop,rowH,
+  };
+  document.querySelectorAll(`.ev-block[data-evid="${evId}"]`).forEach(el=>el.classList.add('block-resizing'));
+  document.addEventListener('mousemove',onResizeMove);document.addEventListener('mouseup',onResizeEnd);
+}
+function getRiFromY(clientY){
+  const{blockTop,rowH,origStartRi}=blockResize;
+  const offset=Math.floor((clientY-blockTop)/rowH);
+  return origStartRi+offset;
+}
+function onResizeMove(e){
+  if(!blockResize)return;
+  document.querySelectorAll('.td-slot.resize-target,.td-slot.resize-blocked,.td-slot.resize-shrink').forEach(c=>c.classList.remove('resize-target','resize-blocked','resize-shrink'));
+  let targetRi=getRiFromY(e.clientY);
+  targetRi=Math.max(0,Math.min(7,targetRi));
+
+  const {edge,origStartRi,origEndRi}=blockResize;
+  let newStart, newEnd;
+
+  if(edge==='bottom'){
+    if(targetRi<origStartRi) targetRi=origStartRi;
+    newStart=origStartRi; newEnd=targetRi;
+    blockResize.currentStartRi=newStart; blockResize.currentEndRi=newEnd;
+  } else {
+    if(targetRi>origEndRi) targetRi=origEndRi;
+    newStart=targetRi; newEnd=origEndRi;
+    blockResize.currentStartRi=newStart; blockResize.currentEndRi=newEnd;
+  }
+
+  const conflict=events.find(e2=>{
+    if(e2.id===blockResize.evId)return false;
+    if(e2.room!==blockResize.room||e2.date!==blockResize.date||e2.shift!==blockResize.shift)return false;
+    const{startRi:s,endRi:en}=evToRi(e2);
+    return newStart<=en && newEnd>=s;
+  });
+  const keepCls=conflict?'resize-blocked':'resize-target';
+
+  for(let r=newStart;r<=newEnd;r++){
+    document.querySelectorAll(`.td-slot[data-room="${blockResize.room}"][data-date="${blockResize.date}"][data-shift="${blockResize.shift}"][data-ri="${r}"]`).forEach(c=>c.classList.add(keepCls));
+  }
+
+  if(edge==='bottom'){
+    for(let r=newEnd+1;r<=origEndRi;r++){
+      document.querySelectorAll(`.td-slot[data-room="${blockResize.room}"][data-date="${blockResize.date}"][data-shift="${blockResize.shift}"][data-ri="${r}"]`).forEach(c=>c.classList.add('resize-shrink'));
+    }
+  } else {
+    for(let r=origStartRi;r<=newStart-1;r++){
+      document.querySelectorAll(`.td-slot[data-room="${blockResize.room}"][data-date="${blockResize.date}"][data-shift="${blockResize.shift}"][data-ri="${r}"]`).forEach(c=>c.classList.add('resize-shrink'));
+    }
+  }
+}
+async function onResizeEnd(e){
+  document.removeEventListener('mousemove',onResizeMove);document.removeEventListener('mouseup',onResizeEnd);
+  document.querySelectorAll('.td-slot.resize-target,.td-slot.resize-blocked,.td-slot.resize-shrink').forEach(c=>c.classList.remove('resize-target','resize-blocked','resize-shrink'));
+  if(!blockResize)return;
+  const{evId,room,date,shift,origStartRi,origEndRi,currentStartRi,currentEndRi}=blockResize;
+  document.querySelectorAll(`.ev-block[data-evid="${evId}"]`).forEach(el=>el.classList.remove('block-resizing'));
+  blockResize=null;
+
+  if(currentStartRi===origStartRi && currentEndRi===origEndRi)return;
+
+  const conflict=events.find(e2=>{
+    if(e2.id===evId)return false;
+    if(e2.room!==room||e2.date!==date||e2.shift!==shift)return false;
+    const{startRi:s,endRi:en}=evToRi(e2);
+    return currentStartRi<=en && currentEndRi>=s;
+  });
+  if(conflict){showToast(`⚠️ 시간 조절 불가 — 겹치는 예약 (${conflict.title})`);buildTable();return;}
+
+  saveUndo();
+  const ev=events.find(x=>x.id===evId);if(!ev)return;
+  const{startTime,endTime}=riToTimes(shift,currentStartRi,currentEndRi);
+  ev.startTime=startTime;ev.endTime=endTime;
+  
+  // 🔥 Firestore 업데이트
+  await updateEventInFirestore(ev);
+  
+  buildTable();renderStats();
+  showToast(`✅ ${startTime}~${endTime} (${currentEndRi-currentStartRi+1}시간)으로 조절됨`);
+}
+
+// ── DRAG & CLICK (나머지 코드는 동일하므로 생략) ──
+let selection=null;
+function onMouseDown(e){
+  if(e.button!==0)return;e.preventDefault();const td=e.currentTarget;
+  if(selection&&parseInt(td.dataset.room)===selection.room&&td.dataset.date===selection.date&&td.dataset.shift===selection.shift&&parseInt(td.dataset.ri)>=selection.startRi&&parseInt(td.dataset.ri)<=selection.endRi){openFromSelection();return;}
+  clearSelection();updateCursorFromTd(td);
+  drag={room:parseInt(td.dataset.room),date:td.dataset.date,shift:td.dataset.shift,startRi:parseInt(td.dataset.ri),endRi:parseInt(td.dataset.ri),active:true,moved:false};
+  applyPreview();
+}
+function onMouseEnter(e){
+  if(!drag||!drag.active)return;const td=e.currentTarget;
+  if(parseInt(td.dataset.room)!==drag.room)return;if(td.dataset.date!==drag.date)return;if(td.dataset.shift!==drag.shift)return;
+  const ri=parseInt(td.dataset.ri);if(ri===drag.startRi)return;if(ri<drag.startRi)return;
+  let limitRi=ri;
+  for(let r=drag.startRi;r<=ri;r++){const booked=events.find(ev=>{if(ev.room!==drag.room||ev.date!==drag.date||ev.shift!==drag.shift)return false;const{startRi:s,endRi:en}=evToRi(ev);return r>=s&&r<=en;});if(booked){limitRi=r-1;break;}}
+  drag.endRi=Math.max(drag.startRi,limitRi);drag.moved=true;applyPreview();
+}
+function onMouseUp(e){
+  if(!drag||!drag.active)return;const td=e.currentTarget;
+  const sameCell=(parseInt(td.dataset.room)===drag.room&&td.dataset.date===drag.date&&td.dataset.shift===drag.shift);
+  if(sameCell||drag.moved)confirmSelection();
+  clearPreview();drag=null;
+}
+function confirmSelection(){
+  const{room,date,shift,startRi,endRi}=drag;
+  const conflict=events.find(e=>{if(e.room!==room||e.date!==date||e.shift!==shift)return false;const{startRi:s,endRi:en}=evToRi(e);return startRi<=en&&endRi>=s;});
+  if(conflict){const r=ROOMS.find(r=>r.id===room);alert(`⚠️ ${r.name} ${shift==='day'?'주간':'야간'}에 겹치는 예약이 있습니다.\n(${conflict.title} ${conflict.startTime}~${conflict.endTime})`);clearDrag();return;}
+  selection={room,date,shift,startRi,endRi};cursor={room,date,shift,ri:startRi};applySelection();applyCursor();
+}
+function applySelection(){clearSelectionHighlight();if(!selection)return;const{room,date,shift,startRi,endRi}=selection;for(let ri=startRi;ri<=endRi;ri++){document.querySelectorAll(`.td-slot[data-room="${room}"][data-date="${date}"][data-shift="${shift}"][data-ri="${ri}"]`).forEach(c=>c.classList.add('selected'));}}
+function clearSelectionHighlight(){document.querySelectorAll('.td-slot.selected').forEach(c=>c.classList.remove('selected'));}
+function clearSelection(){clearSelectionHighlight();selection=null;}
+function openFromSelection(){if(!selection)return;const{room,date,shift,startRi,endRi}=selection;clearSelection();cursor=null;applyCursor();const{startTime,endTime}=riToTimes(shift,startRi,endRi);openModal({room,date,shift,startTime,endTime});}
+function applyPreview(){clearPreview();if(!drag)return;for(let ri=drag.startRi;ri<=drag.endRi;ri++){document.querySelectorAll(`.td-slot[data-room="${drag.room}"][data-date="${drag.date}"][data-shift="${drag.shift}"][data-ri="${ri}"]`).forEach(c=>c.classList.add('drag-preview'));}}
+function clearPreview(){document.querySelectorAll('.td-slot.drag-preview').forEach(c=>c.classList.remove('drag-preview'));}
+function clearDrag(){clearPreview();drag=null;}
+
+document.addEventListener('mousedown',e=>{
+  if(e.target.closest('.ev-block'))return;if(e.target.closest('#detailPopup'))return;if(e.target.closest('.modal'))return;
+  if(selectedId){deselectBlock();closeDetail();}
+  if(!selection)return;const td=e.target.closest('.td-slot');if(!td){clearSelection();return;}
+  if(parseInt(td.dataset.room)===selection.room&&td.dataset.date===selection.date&&td.dataset.shift===selection.shift&&parseInt(td.dataset.ri)>=selection.startRi&&parseInt(td.dataset.ri)<=selection.endRi)return;
+  clearSelection();
+},{capture:true});
+
+// ── KEYBOARD ──
+let cursor=null;
+function getNavContext(){const days=getWeekDays().map(d=>fmtDate(d));const cols=[];days.forEach(date=>{cols.push({date,shift:'day'});cols.push({date,shift:'night'});});return{days,cols};}
+function findColIdx(date,shift){const{cols}=getNavContext();return cols.findIndex(c=>c.date===date&&c.shift===shift);}
+function applyCursor(){document.querySelectorAll('.td-slot.cursor-focus').forEach(c=>c.classList.remove('cursor-focus'));if(!cursor)return;document.querySelectorAll(`.td-slot[data-room="${cursor.room}"][data-date="${cursor.date}"][data-shift="${cursor.shift}"][data-ri="${cursor.ri}"]`).forEach(c=>c.classList.add('cursor-focus'));}
+function moveKey(dRi,dCol,shiftKey){
+  if(!cursor&&!selection)return;if(!cursor&&selection)cursor={room:selection.room,date:selection.date,shift:selection.shift,ri:selection.startRi};
+  const{cols}=getNavContext();let colIdx=findColIdx(cursor.date,cursor.shift);let ri=cursor.ri;
+  if(dRi!==0){let newRi=ri+dRi;if(newRi<0||newRi>7)return;ri=newRi;}
+  if(dCol!==0){let newColIdx=colIdx+dCol;if(newColIdx<0||newColIdx>=cols.length)return;colIdx=newColIdx;}
+  const newDate=cols[colIdx].date;const newShift=cols[colIdx].shift;cursor={room:cursor.room,date:newDate,shift:newShift,ri};applyCursor();
+  if(shiftKey){
+    if(!selection){const anchorRi=ri-dRi;const anchorColIdx=colIdx-dCol;const anchorDate=cols[Math.max(0,Math.min(cols.length-1,anchorColIdx))].date;const anchorShift=cols[Math.max(0,Math.min(cols.length-1,anchorColIdx))].shift;if(anchorDate===newDate&&anchorShift===newShift){selection={room:cursor.room,date:newDate,shift:newShift,startRi:Math.min(anchorRi,ri),endRi:Math.max(anchorRi,ri)};}}
+    else{if(selection.date===newDate&&selection.shift===newShift&&dRi!==0){const anchor=cursor.ri===selection.startRi?selection.endRi:selection.startRi;selection={...selection,startRi:Math.min(anchor,ri),endRi:Math.max(anchor,ri)};}}
+    applySelection();
+  } else {selection={room:cursor.room,date:newDate,shift:newShift,startRi:ri,endRi:ri};applySelection();}
+  const targetEl=document.querySelector(`.td-slot[data-room="${cursor.room}"][data-date="${cursor.date}"][data-shift="${cursor.shift}"][data-ri="${cursor.ri}"]`);if(targetEl)targetEl.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+document.addEventListener('keydown',e=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){if(!selection&&!cursor)return;e.preventDefault();const dMap={ArrowUp:{ri:-1,col:0},ArrowDown:{ri:1,col:0},ArrowLeft:{ri:0,col:-1},ArrowRight:{ri:0,col:1}};const{ri,col}=dMap[e.key];moveKey(ri,col,e.shiftKey);return;}
+  if(e.key==='Enter'&&selection){e.preventDefault();openFromSelection();cursor=null;applyCursor();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key==='c'){if(selectedId){e.preventDefault();copySelectedEvent();}return;}
+  if((e.ctrlKey||e.metaKey)&&e.key==='v'){e.preventDefault();pasteToSelection();return;}
+  if((e.key==='Delete'||e.key==='Backspace')&&selectedId){e.preventDefault();deleteEvent();return;}
+  if(e.key==='Escape'){deselectBlock();exitPasteMode();clearSelection();cursor=null;applyCursor();closeDetail();}
+});
+function updateCursorFromTd(td){cursor={room:parseInt(td.dataset.room),date:td.dataset.date,shift:td.dataset.shift,ri:parseInt(td.dataset.ri)};applyCursor();}
+document.addEventListener('mouseup',()=>{if(drag&&drag.active)clearDrag();});
+
+// ── MINI CAL ──
+let miniCalOffset=0;
+function renderMiniCal(){miniCalOffset=0;renderMiniCalAt(currentMonday.getFullYear(),currentMonday.getMonth());}
+function miniCalMove(dir){const base=new Date(currentMonday.getFullYear(),currentMonday.getMonth()+miniCalOffset+dir,1);miniCalOffset+=dir;renderMiniCalAt(base.getFullYear(),base.getMonth());}
+function renderMiniCalAt(y,m){
+  const today=new Date();const wd=getWeekDays().map(d=>fmtDate(d));const first=new Date(y,m,1).getDay(),total=new Date(y,m+1,0).getDate();
+  const lbl=document.getElementById('mcLbl');lbl.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
+  lbl.innerHTML='<button onclick="miniCalMove(-1)" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--ts);padding:0 2px;">◀</button><span style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.6px;">'+y+'년 '+(m+1)+'월</span><button onclick="miniCalMove(1)" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--ts);padding:0 2px;">▶</button>';
+  let html=DAYS_KO.map(d=>'<div class="mc-dow">'+d+'</div>').join('');
+  for(let i=0;i<first;i++)html+='<div class="mc-day empty"></div>';
+  for(let d=1;d<=total;d++){const dateStr=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');const it=y===today.getFullYear()&&m===today.getMonth()&&d===today.getDate();const iw=wd.includes(dateStr);html+='<div class="'+'mc-day'+(it?' today':iw?' in-week':'')+'" style="cursor:pointer;" onclick="jumpToDate('+y+','+m+','+d+')">'+d+'</div>';}
+  document.getElementById('miniCal').innerHTML=html;
+}
+function jumpToDate(y,m,d){currentMonday=getMonday(new Date(y,m,d));miniCalOffset=0;render();}
+
+// ── FILTERS & STATS ──
+function renderFilters(){document.getElementById('filterList').innerHTML=ROOMS.map(r=>`<label class="f-row"><input type="checkbox" ${visibleRooms.has(r.id)?'checked':''} onchange="toggleRoom(${r.id},this)"><div class="f-dot" style="background:${r.color}"></div>${r.name}</label>`).join('');}
+function toggleRoom(id,cb){if(cb.checked)visibleRooms.add(id);else visibleRooms.delete(id);buildTable();renderStats();}
+function renderStats(){
+  const wd=getWeekDays().map(d=>fmtDate(d));
+  const TOTAL_DAY=8*5,TOTAL_NIGHT=8*5;
+  function evHours(ev){const sMap=ev.shift==='day'?DAY_START_TO_RI:NIGHT_START_TO_RI;const eMap=ev.shift==='day'?DAY_END_TO_RI:NIGHT_END_TO_RI;return(eMap[ev.endTime]??0)-(sMap[ev.startTime]??0)+1;}
+  const html=ROOMS.filter(r=>visibleRooms.has(r.id)).map(r=>{
+    const evs=events.filter(e=>e.room===r.id&&wd.includes(e.date));
+    const usedDay=evs.filter(e=>e.shift==='day').reduce((s,e)=>s+evHours(e),0);
+    const usedNight=evs.filter(e=>e.shift==='night').reduce((s,e)=>s+evHours(e),0);
+    const remDay=Math.max(0,TOTAL_DAY-usedDay),remNight=Math.max(0,TOTAL_NIGHT-usedNight),remAll=remDay+remNight;
+    const pctDay=Math.round((remDay/TOTAL_DAY)*100),pctNight=Math.round((remNight/TOTAL_NIGHT)*100);
+    const barColor=p=>p>50?'#107c10':p>25?'#d97706':'#c43e1c';
+    return `<div class="st-item"><div class="st-head"><span class="st-lbl" style="color:${r.color};font-weight:700;">${r.name}</span><span class="st-val" style="color:${remAll===0?'#c43e1c':remAll<8?'#d97706':'#107c10'}">잔여 ${remAll}h</span></div>
+    <div style="display:flex;gap:4px;margin-bottom:4px;">
+      <div style="flex:1;"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:9px;color:#7a4f00;font-weight:600;">주간</span><span style="font-size:9px;color:${barColor(pctDay)};font-weight:700;">${remDay}h 남음</span></div><div class="st-bar"><div class="st-fill" style="width:${pctDay}%;background:${barColor(pctDay)}"></div></div></div>
+      <div style="flex:1;"><div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span style="font-size:9px;color:#003580;font-weight:600;">야간</span><span style="font-size:9px;color:${barColor(pctNight)};font-weight:700;">${remNight}h 남음</span></div><div class="st-bar"><div class="st-fill" style="width:${pctNight}%;background:${barColor(pctNight)}"></div></div></div>
+    </div></div>`;
+  }).join('');
+  document.getElementById('statsArea').innerHTML=html||'<div style="font-size:10px;color:#aaa">없음</div>';
+}
+
+// ── MODAL ──
+function updateTimeOpts(defStart,defEnd){const shift=document.getElementById('f_shift').value;const times=shift==='day'?DAY_TIMES:NIGHT_TIMES;const fs=document.getElementById('f_start');const fe=document.getElementById('f_end');fs.innerHTML=times.slice(0,-1).map(t=>`<option value="${t}">${t}</option>`).join('');fe.innerHTML=times.slice(1).map(t=>`<option value="${t}">${t}</option>`).join('');fs.value=defStart||times[0];fe.value=defEnd||times[times.length-1];}
+function openModal(pre){
+  editingId=null;document.getElementById('modalTitle').textContent='새 예약 등록';['f_dept','f_title','f_note'].forEach(id=>document.getElementById(id).value='');
+  const sel=document.getElementById('f_room');sel.innerHTML=ROOMS.map(r=>`<option value="${r.id}">${r.name}</option>`).join('');
+  if(pre?.room)sel.value=pre.room;document.getElementById('f_shift').value=pre?.shift||'day';updateTimeOpts(pre?.startTime,pre?.endTime);document.getElementById('f_date').value=pre?.date||fmtDate(new Date());
+  const si=document.getElementById('slotInfo');if(pre){si.style.display='block';si.textContent=`📌 ${ROOMS.find(r=>r.id==pre.room)?.name||''} / ${pre.date} / ${pre.shift==='day'?'주간':'야간'} ${pre.startTime}~${pre.endTime}`;}else si.style.display='none';
+  document.getElementById('overlay').classList.add('open');
+}
+function closeModal(){document.getElementById('overlay').classList.remove('open');editingId=null;}
+async function submitReservation(){
+  const title=document.getElementById('f_title').value.trim();const dept=document.getElementById('f_dept').value.trim();const room=parseInt(document.getElementById('f_room').value);const date=document.getElementById('f_date').value;const shift=document.getElementById('f_shift').value;const startTime=document.getElementById('f_start').value;const endTime=document.getElementById('f_end').value;const note=document.getElementById('f_note').value.trim();
+  if(!title||!date){alert('필수 항목을 입력하세요.');return;}
+  const sMap=shift==='day'?DAY_START_TO_RI:NIGHT_START_TO_RI;const eMap=shift==='day'?DAY_END_TO_RI:NIGHT_END_TO_RI;const newS=sMap[startTime]??0,newE=eMap[endTime]??0;
+  const conflict=events.find(e=>{if(e.id===editingId||e.room!==room||e.date!==date||e.shift!==shift)return false;const{startRi:s,endRi:en}=evToRi(e);return newS<=en&&newE>=s;});
+  if(conflict){alert(`⚠️ 시간이 겹치는 예약이 있습니다.\n(${conflict.title} ${conflict.startTime}~${conflict.endTime})`);return;}
+  
+  saveUndo();
+  
+  if(editingId){
+    // 수정
+    const ev = events.find(e=>e.id===editingId);
+    if(ev){
+      ev.room=room;ev.shift=shift;ev.startTime=startTime;ev.endTime=endTime;ev.title=title;ev.dept=dept;ev.date=date;ev.note=note;
+      await updateEventInFirestore(ev);
+    }
+  }else{
+    // 신규 추가
+    const newEvent = {id:generateId(),room,shift,startTime,endTime,title,dept,date,note};
+    events.push(newEvent);
+    await addEventToFirestore(newEvent);
+  }
+  
+  closeModal();buildTable();renderStats();refreshCopyHighlight();
+}
+
+// ── DETAIL ──
+let clickTimer=null;
+function handleBlockClick(id,e){
+  e.stopPropagation();
+  if(clickTimer){clearTimeout(clickTimer);clickTimer=null;deselectBlock();closeDetail();openEditModal(id);}
+  else{clickTimer=setTimeout(()=>{clickTimer=null;selectBlock(id,e);},200);}
+}
+function selectBlock(id,e){
+  deselectBlock();selectedId=id;copiedEvent={...events.find(x=>x.id===id)};pasteMode=false;
+  document.querySelectorAll(`.ev-block[data-evid="${id}"]`).forEach(el=>el.classList.add('ev-selected','copied'));
+  showToast(`📋 "${copiedEvent.title}" 선택됨 — 붙여넣을 셀을 클릭 후 Ctrl+V`);showDetail(id,e);
+}
+function deselectBlock(){document.querySelectorAll('.ev-block.ev-selected').forEach(el=>el.classList.remove('ev-selected','copied'));selectedId=null;}
+function openEditModal(id){
+  const ev=events.find(e=>e.id===id);if(!ev)return;editingId=id;document.getElementById('modalTitle').textContent='예약 수정';
+  const sel=document.getElementById('f_room');sel.innerHTML=ROOMS.map(r=>`<option value="${r.id}">${r.name}</option>`).join('');sel.value=ev.room;
+  document.getElementById('f_title').value=ev.title;document.getElementById('f_dept').value=ev.dept;document.getElementById('f_date').value=ev.date;document.getElementById('f_note').value=ev.note;document.getElementById('f_shift').value=ev.shift;
+  updateTimeOpts(ev.startTime,ev.endTime);document.getElementById('slotInfo').style.display='none';document.getElementById('overlay').classList.add('open');
+}
+
+// ── COPY / PASTE ──
+let copiedEvent=null,pasteMode=false;
+function showToast(msg,duration=2200){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),duration);}
+function copySelectedEvent(id){const targetId=id||selectedId;if(!targetId)return;const ev=events.find(e=>e.id===targetId);if(!ev)return;copiedEvent={...ev};pasteMode=false;refreshCopyHighlight();showToast(`📋 "${ev.title}" 복사됨 — 셀 선택 후 Ctrl+V`);}
+function refreshCopyHighlight(){document.querySelectorAll('.ev-block.copied').forEach(el=>el.classList.remove('copied'));if(!copiedEvent)return;document.querySelectorAll(`.ev-block[data-evid="${copiedEvent.id}"]`).forEach(el=>el.classList.add('copied'));}
+function pasteToSelection(){
+  if(!copiedEvent){showToast('먼저 예약 블록을 클릭하세요');return;}
+  let target=null;if(selection)target={room:selection.room,date:selection.date,shift:selection.shift,startRi:selection.startRi};else if(cursor)target={room:cursor.room,date:cursor.date,shift:cursor.shift,startRi:cursor.ri};else{showToast('붙여넣을 셀을 먼저 클릭하세요');return;}
+  pasteEvent(target.room,target.date,target.shift,target.startRi);clearSelection();cursor=null;applyCursor();
+}
+function enterPasteMode(){if(!copiedEvent){showToast('먼저 예약을 복사하세요');return;}pasteMode=true;showToast('📌 붙여넣을 빈 셀을 클릭하세요 (Esc: 취소)',4000);applyPasteReady();}
+function exitPasteMode(){pasteMode=false;document.querySelectorAll('.td-slot.paste-ready').forEach(c=>c.classList.remove('paste-ready'));}
+function applyPasteReady(){
+  document.querySelectorAll('.td-slot.paste-ready').forEach(c=>c.classList.remove('paste-ready'));if(!pasteMode||!copiedEvent)return;
+  const{room,shift}=copiedEvent;const{startRi,endRi}=evToRi(copiedEvent);const span=endRi-startRi+1;
+  document.querySelectorAll(`.td-slot[data-room="${room}"][data-shift="${shift}"]`).forEach(td=>{
+    const ri=parseInt(td.dataset.ri);const date=td.dataset.date;let canFit=true;
+    for(let r=ri;r<ri+span;r++){if(r>7){canFit=false;break;}const booked=events.find(e=>{if(e.room!==room||e.date!==date||e.shift!==shift)return false;const{startRi:s,endRi:en}=evToRi(e);return r>=s&&r<=en;});if(booked){canFit=false;break;}}
+    if(canFit)td.classList.add('paste-ready');
+  });
+}
+async function pasteEvent(room,date,shift,startRi){
+  if(!copiedEvent)return;
+  const{startRi:origStart,endRi:origEnd}=evToRi(copiedEvent);
+  const span=origEnd-origStart+1;
+  let endRi=startRi+span-1;
+
+  if(endRi>7) endRi=7;
+
+  for(let r=startRi;r<=endRi;r++){
+    const booked=events.find(e=>{
+      if(e.room!==room||e.date!==date||e.shift!==shift)return false;
+      const{startRi:s,endRi:en}=evToRi(e);
+      return r>=s&&r<=en;
+    });
+    if(booked){ endRi=r-1; break; }
+  }
+
+  if(endRi<startRi){showToast(`⚠️ 해당 위치에 이미 예약이 있습니다`);return;}
+
+  const{startTime,endTime}=riToTimes(shift,startRi,endRi);
+  const newEv={...copiedEvent,id:generateId(),room,shift,date,startTime,endTime};
+  saveUndo();
+  events.push(newEv);
+  
+  // 🔥 Firestore에 추가
+  await addEventToFirestore(newEv);
+  
+  buildTable();renderStats();refreshCopyHighlight();exitPasteMode();
+  const hrs=endRi-startRi+1;
+  const shiftLbl=shift==='day'?'주간':'야간';
+  if(hrs<span){
+    showToast(`✅ "${newEv.title}" → ${date} ${shiftLbl} ${startTime}~${endTime} (원본 ${span}h → ${hrs}h로 축소)`);
+  } else {
+    showToast(`✅ "${newEv.title}" → ${date} ${shiftLbl} ${startTime}~${endTime}`);
+  }
+}
+
+function showDetail(id,e){
+  selectedId=id;const ev=events.find(x=>x.id===id);const r=ROOMS.find(x=>x.id===ev.room);
+  const popup=document.getElementById('detailPopup');popup.style.borderTopColor=r.color;
+  document.getElementById('dp-title').textContent=ev.title;
+  const shiftTxt=ev.shift==='day'?'주간':'야간';const days2=['일','월','화','수','목','금','토'];const dateObj=new Date(ev.date);
+  document.getElementById('dp-sub').textContent=`${ev.date.slice(5).replace('-','/')} (${days2[dateObj.getDay()]}) ${shiftTxt}`;
+  document.getElementById('dp-body').innerHTML=`
+    <div class="dr"><span class="di">⏰</span><div class="dr-text"><b>${ev.startTime} ~ ${ev.endTime}</b>　${shiftTxt}</div></div>
+    <div class="dr"><span class="di">🏢</span><div class="dr-text">${r.name}</div></div>
+    ${ev.dept?`<div class="dr"><span class="di">👤</span><div class="dr-text">${ev.dept}</div></div>`:''}
+    ${ev.note?`<div class="dr"><span class="di">📝</span><div class="dr-text">${ev.note}</div></div>`:''}
+    <div class="dr"><span class="di" style="font-size:10px;">💡</span><div class="dr-text" style="font-size:10px;color:var(--tm);">더블클릭: 수정 | 클릭 시 자동 복사됨</div></div>`;
+  popup.classList.add('open');
+  const vw=window.innerWidth,vh=window.innerHeight;let x=e.clientX+16,y=e.clientY-8;if(x+280>vw)x=e.clientX-285;if(y+280>vh)y=vh-290;if(y<8)y=8;popup.style.left=x+'px';popup.style.top=y+'px';
+}
+function closeDetail(){document.getElementById('detailPopup').classList.remove('open');}
+async function deleteEvent(){
+  if(!selectedId)return;
+  const ev=events.find(e=>e.id===selectedId);
+  if(!ev)return;
+  
+  if(!confirm(`"${ev.title}" 예약을 삭제하시겠습니까?`)) return;
+  
+  saveUndo();
+  const title=ev.title;
+  const eventId = selectedId;
+  
+  events=events.filter(e=>e.id!==selectedId);
+  
+  // 🔥 Firestore에서 삭제
+  await deleteEventFromFirestore(eventId);
+  
+  deselectBlock();
+  closeDetail();
+  buildTable();
+  renderStats();
+  showToast(`🗑️ "${title}" 삭제됨 (Ctrl+Z로 복구)`);
+}
+function editEvent(){const id=selectedId;closeDetail();openEditModal(id);}
+document.addEventListener('click',e=>{const p=document.getElementById('detailPopup');if(p.classList.contains('open')&&!p.contains(e.target))closeDetail();});
+
+function render(){document.getElementById('weekLbl').textContent=curWeekLabel();buildTable();renderMiniCal();renderFilters();renderStats();}
+function changeWeek(dir){currentMonday.setDate(currentMonday.getDate()+dir*7);render();}
+function goToday(){currentMonday=getMonday(new Date());render();}
+
+// ══════════════════════════════════════════════════════════════
+// 🚀 앱 초기화
+// ══════════════════════════════════════════════════════════════
+
+window.addEventListener('load', async () => {
+  console.log('🚀 앱 시작...');
+  
+  // Firestore 로드 대기
+  let retries = 0;
+  while (!window.firestoreDB && retries < 20) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    retries++;
+  }
+  
+  if (!window.firestoreDB) {
+    alert('⚠️ Firestore 연결 실패. 페이지를 새로고침 해주세요.');
+    return;
+  }
+  
+  // Firestore에서 데이터 로드
+  await loadEventsFromFirestore();
+  
+  // 실시간 리스너 설정
+  setupFirestoreListener();
+  
+  // UI 렌더링
+  render();
+  
+  console.log('✅ 앱 초기화 완료');
+});
+</script>
+</body>
+</html>
