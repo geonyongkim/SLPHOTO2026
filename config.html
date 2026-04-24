@@ -3,32 +3,76 @@
 <head>
   <meta charset="utf-8">
   <title>탭 설정</title>
-  <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+  <script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
-    .card { background: #fff; border-radius: 12px; padding: 32px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .card { background: #fff; border-radius: 12px; padding: 32px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 400px; }
     h2 { margin: 0 0 8px; color: #333; }
-    p { color: #666; font-size: 14px; }
+    p { color: #666; font-size: 14px; line-height: 1.6; }
+    .status { margin-top: 12px; font-size: 12px; color: #999; }
   </style>
 </head>
 <body>
   <div class="card">
     <h2>광원측정실 일정표</h2>
-    <p>이 탭을 채널에 추가합니다.<br>"저장" 버튼을 눌러주세요.</p>
+    <p>이 탭을 채널에 추가합니다.<br>상단의 <strong>"저장"</strong> 버튼을 눌러주세요.</p>
+    <div class="status" id="status">초기화 중...</div>
   </div>
   <script>
-    microsoftTeams.app.initialize().then(function() {
-      microsoftTeams.pages.config.registerOnSaveHandler(function(saveEvent) {
-        microsoftTeams.pages.config.setConfig({
-          entityId: "schedule-channel-tab",
-          contentUrl: "https://endless9544-alt.github.io/SLPHOTO2026/",
-          websiteUrl: "https://endless9544-alt.github.io/SLPHOTO2026/",
-          suggestedDisplayName: "광원측정실 일정표"
+    var statusEl = document.getElementById('status');
+
+    // SDK v2 시도 → 실패 시 v1 폴백
+    function initV2() {
+      microsoftTeams.app.initialize().then(function() {
+        statusEl.textContent = 'SDK v2 초기화 완료';
+        microsoftTeams.pages.config.registerOnSaveHandler(function(saveEvent) {
+          microsoftTeams.pages.config.setConfig({
+            entityId: "schedule-channel-tab",
+            contentUrl: "https://geonyongkim.github.io/SLPHOTO2026/",
+            websiteUrl: "https://geonyongkim.github.io/SLPHOTO2026/",
+            suggestedDisplayName: "광원측정실 일정표"
+          });
+          saveEvent.notifySuccess();
         });
-        saveEvent.notifySuccess();
+        microsoftTeams.pages.config.setValidityState(true);
+        statusEl.textContent = '준비 완료 — 저장 버튼을 눌러주세요';
+      }).catch(function(err) {
+        statusEl.textContent = 'v2 실패, v1으로 시도 중...';
+        initV1();
       });
-      microsoftTeams.pages.config.setValidityState(true);
-    });
+    }
+
+    function initV1() {
+      try {
+        microsoftTeams.initialize(function() {
+          statusEl.textContent = 'SDK v1 초기화 완료';
+          microsoftTeams.settings.registerOnSaveHandler(function(saveEvent) {
+            microsoftTeams.settings.setSettings({
+              entityId: "schedule-channel-tab",
+              contentUrl: "https://geonyongkim.github.io/SLPHOTO2026/",
+              websiteUrl: "https://geonyongkim.github.io/SLPHOTO2026/",
+              suggestedDisplayName: "광원측정실 일정표"
+            });
+            saveEvent.notifySuccess();
+          });
+          microsoftTeams.settings.setValidityState(true);
+          statusEl.textContent = '준비 완료 — 저장 버튼을 눌러주세요';
+        });
+      } catch(e) {
+        statusEl.textContent = '오류: ' + e.message;
+      }
+    }
+
+    // 시작
+    try {
+      if (microsoftTeams.app && microsoftTeams.app.initialize) {
+        initV2();
+      } else {
+        initV1();
+      }
+    } catch(e) {
+      initV1();
+    }
   </script>
 </body>
 </html>
