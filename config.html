@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>탭 설정</title>
+  <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+    .card { background: #fff; border-radius: 12px; padding: 32px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h2 { margin: 0 0 8px; color: #333; }
+    p { color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>광원측정실 일정표</h2>
+    <p>이 탭을 채널에 추가합니다.<br>"저장" 버튼을 눌러주세요.</p>
+  </div>
+  <script>
+    microsoftTeams.app.initialize().then(function() {
+      microsoftTeams.pages.config.registerOnSaveHandler(function(saveEvent) {
+        microsoftTeams.pages.config.setConfig({
+          entityId: "schedule-channel-tab",
+          contentUrl: "https://endless9544-alt.github.io/SLPHOTO2026/",
+          websiteUrl: "https://endless9544-alt.github.io/SLPHOTO2026/",
+          suggestedDisplayName: "광원측정실 일정표"
+        });
+        saveEvent.notifySuccess();
+      });
+      microsoftTeams.pages.config.setValidityState(true);
+    });
+  </script>
+</body>
+</html>
